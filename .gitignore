@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+dataset_gold_standard/
+dataset_LLM_classification/
