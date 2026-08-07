@@ -5,3 +5,10 @@ __pycache__/
 dataset_gold_standard/
 dataset_LLM_classification/
 plan.md
+.pytest_cache/
+logs/
+
+# Source paper and the authors' released code/data - reference material, not ours to redistribute.
+ocae254.pdf
+ocae254_supplementary_data.docx
+25962529/
