@@ -8,6 +8,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 
 import numpy as np
+import pandas as pd
 from sklearn.metrics import roc_auc_score
 
 # The paper's threshold for clinically useful discriminative ability.
@@ -74,3 +75,78 @@ def clustered_bootstrap_ci(
         float(np.percentile(aucs, 100 * alpha / 2)),
         float(np.percentile(aucs, 100 * (1 - alpha / 2))),
     )
+
+
+def bin_indices(confidence: Sequence[float], max_bins: int = 10) -> tuple[np.ndarray, int]:
+    """Assign each observation to a bin, adapting to how many distinct values exist.
+
+    The authors bin with pd.qcut(confidence, 10). Our SC confidence at N=5 takes exactly
+    three values, and qcut cannot produce ten unique edges from three values - it raises
+    ValueError: Bin edges must be unique. So: bin by distinct value when there are few,
+    and fall back to quantile bins only when there are enough to support them.
+
+    Bin indices are ordered by confidence, so bin 0 is always the least confident.
+    """
+    values = np.asarray(confidence, dtype=float)
+    distinct = np.unique(values)
+
+    if len(distinct) <= max_bins:
+        return np.searchsorted(distinct, values), len(distinct)
+
+    ranks = np.asarray(pd.qcut(values, max_bins, labels=False, duplicates="drop"), dtype=int)
+    return ranks, int(ranks.max()) + 1
+
+
+def expected_calibration_error(
+    confidence: Sequence[float],
+    correct: Sequence[int],
+    max_bins: int = 10,
+) -> float:
+    """Weighted mean gap between stated confidence and observed accuracy.
+
+        ECE = sum_b (n_b / N) * |mean_confidence_b - accuracy_b|
+    """
+    values = np.asarray(confidence, dtype=float)
+    outcomes = np.asarray(correct, dtype=float)
+    indices, n_bins = bin_indices(values, max_bins)
+
+    total = len(values)
+    error = 0.0
+    for bin_index in range(n_bins):
+        mask = indices == bin_index
+        if not mask.any():
+            continue
+        weight = mask.sum() / total
+        error += weight * abs(values[mask].mean() - outcomes[mask].mean())
+
+    return float(error)
+
+
+def brier_score(confidence: Sequence[float], correct: Sequence[int]) -> float:
+    """Mean squared distance between stated confidence and the outcome.
+
+    No binning, so unlike ECE this is well defined however few distinct values there are.
+    """
+    values = np.asarray(confidence, dtype=float)
+    outcomes = np.asarray(correct, dtype=float)
+    return float(np.mean((values - outcomes) ** 2))
+
+
+def calibration_points(
+    confidence: Sequence[float],
+    correct: Sequence[int],
+    max_bins: int = 10,
+) -> list[tuple[float, float, int]]:
+    """(mean confidence, observed accuracy, count) per bin - the calibration plot's data."""
+    values = np.asarray(confidence, dtype=float)
+    outcomes = np.asarray(correct, dtype=float)
+    indices, n_bins = bin_indices(values, max_bins)
+
+    points: list[tuple[float, float, int]] = []
+    for bin_index in range(n_bins):
+        mask = indices == bin_index
+        if not mask.any():
+            continue
+        points.append((float(values[mask].mean()), float(outcomes[mask].mean()), int(mask.sum())))
+
+    return points
