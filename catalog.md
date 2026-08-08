@@ -427,7 +427,22 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 | 2 | Config, effort table, cost estimator | `042deb4` | 56 |
 | 3 | SC and CE proxy primitives | `0beb4f3` | 63 |
 | 4 | Row assembly, gold join, exclusions | `7ee2274` | 75 |
-| 5–14 | not started | | |
+| 5 | ROC AUC, case-clustered bootstrap | `3500883` | 84 |
+| 6 | Adaptive-bin ECE, Brier, calibration points | `8564b38` | 95 |
+| 7–14 | not started | | |
+
+**A third correction, from Task 5.** The plan's bootstrap fixture was perfectly separable,
+so every draw returned AUC 1.0, both intervals collapsed to zero width, and the
+"clustered is wider" assertion compared `0 > 0`. Fixing it surfaced something the design
+had glossed: modelling only *correctness* at the case level is not enough either — the
+confidences stay independent within a case, so a drawn case behaves like 19 independent
+rows and clustering buys nothing (measured: clustered 0.086 vs row 0.103, i.e.
+*narrower*). The real structure needs a case-level random effect on **confidence** too,
+since all 19 findings are read off one shared report. With that, clustered intervals come
+out ~4× wider (0.43 vs 0.10) across every seed tried.
+
+Practical upshot for D9: row-level resampling would have reported ±0.05 where the honest
+interval is ±0.20.
 
 **Two corrections Task 1 forced**, both recorded in `plan.md`:
 
