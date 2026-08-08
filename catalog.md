@@ -429,7 +429,9 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 | 4 | Row assembly, gold join, exclusions | `7ee2274` | 75 |
 | 5 | ROC AUC, case-clustered bootstrap | `3500883` | 84 |
 | 6 | Adaptive-bin ECE, Brier, calibration points | `8564b38` | 95 |
-| 7–14 | not started | | |
+| 7 | JSONL persistence and resume | `dec03b1` | 105 |
+| 8 | Replicate call, two-step CE call, CE prompt | `55b5fa3` | 113 |
+| 9–14 | not started | | |
 
 **A third correction, from Task 5.** The plan's bootstrap fixture was perfectly separable,
 so every draw returned AUC 1.0, both intervals collapsed to zero width, and the
