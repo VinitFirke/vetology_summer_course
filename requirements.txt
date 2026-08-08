@@ -1,0 +1,9 @@
+langchain-core>=0.3
+langchain-openai>=0.2
+langchain-mistralai>=0.2
+langchain-groq>=0.2
+pydantic>=2.7
+pandas>=2.2
+openpyxl>=3.1
+python-dotenv>=1.0
+pytest>=8.0
