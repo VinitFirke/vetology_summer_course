@@ -420,7 +420,7 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 
 ## Open items
 
-- [ ] Write the implementation plan into `plan.md`
+- [ ] Execute the implementation plan (`plan.md`, Phase 3, Tasks 1–14)
 - [ ] Run the logprobs probe (D5) and record the result here
 - [ ] Replace estimated effort multipliers with measured ones from a 2-case smoke run per tier
 - [ ] Verify each provider accepts its three effort strings (D4) — especially Mistral's `none`
@@ -433,3 +433,8 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 - **2026-08-08** — D8–D10 recorded. Design approved and written to
   `uncertainty-quantification-design.md`. Corrected the row count in D1 from 1000 to 950
   (19 findings, not 20 — `diseased_lungs` is derived, see D8).
+- **2026-08-08** — Implementation plan written as Phase 3 of `plan.md`, 14 TDD tasks.
+  Two changes to D6's module list came out of planning: `build_tier_model` lives in a new
+  `uncertainty/llm.py` rather than in `uq_main.py`, so `probe.py` can import it without a
+  root script importing back into the package; and `uq_main.py` appends its real token
+  spend to `logs/token_usage.md`, keeping both pipelines' costs in one file.

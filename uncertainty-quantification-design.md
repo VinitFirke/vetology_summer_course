@@ -168,7 +168,8 @@ paying every time an ECE bug is fixed. It is the same principle that makes
 |---|---|---|
 | `uncertainty/config.py` | Effort tier table, N, paths, price table | `classifier.config` |
 | `uncertainty/schemas.py` | `CaseLabels`, `CaseConfidence` | `classifier.schemas` |
-| `uncertainty/sample.py` | Run one case N times at one tier; append JSONL; resume | `classifier.classify` |
+| `uncertainty/llm.py` | Build a chat model for one provider at one effort tier | `classifier.config` |
+| `uncertainty/sample.py` | Run one case N times at one tier; append JSONL; resume; CE call | `classifier.classify` |
 | `uncertainty/proxies.py` | Raw samples → confidence values (pure) | — |
 | `uncertainty/stats.py` | `(confidence, correct)` → AUC / ECE / Brier (pure) | `sklearn`, `numpy` |
 | `uncertainty/probe.py` | Logprobs capability check | `classifier.llm` |
