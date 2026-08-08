@@ -545,6 +545,115 @@ through it then, and the plan's omission is why it did not.
 Cheap to repair thanks to D7's resume design: `plan_run` tracks replicates and CE
 separately, so a resume pass re-requests only the failed CE calls.
 
+### D14 — Final results, all three providers
+
+**Run complete 2026-08-08.** 2,000 replicate calls + 400 CE calls across 8 provider-tier
+combinations, every cell at 250/250 replicates and 50/50 CE. 15,200 proxy rows.
+
+**Actual spend $24.62** against a $25.50 estimate and $40 of credit:
+
+| provider | input | output | actual | estimated | budget |
+|---|---|---|---|---|---|
+| openai | 888,660 | 478,862 | $0.75 | $0.78 | $10 |
+| mistral | 603,892 | 1,194,386 | $9.86 | $9.76 | $10 |
+| kimi | 1,033,302 | 727,100 | $14.01 | $14.96 | $20 |
+| | | | **$24.62** | $25.50 | $40 |
+
+Every provider landed within 4% of its post-measurement estimate. Mistral came within
+$0.14 of its $10 ceiling — the decision in D11 to drop its duplicate medium tier was
+what made it fit.
+
+#### Result 1 — CE beats SC everywhere. This reverses the paper.
+
+| | SC AUC | CE AUC |
+|---|---|---|
+| openai low / medium / high | 0.627 / 0.608 / 0.628 | **0.787 / 0.820 / 0.775** |
+| mistral low / high | 0.591 / 0.558 | **0.914** / 0.617 |
+| kimi low / medium / high | 0.617 / 0.656 / 0.637 | **0.815 / 0.777 / 0.795** |
+
+SC clears the paper's 0.7 usefulness threshold in **zero of eight** cells. CE clears it in
+**six of eight**. Savage et al. found the opposite ordering (SC 0.68–0.79 best, CE worst)
+on every model they tested.
+
+#### Result 2 — why SC fails here, and why "fails" is the wrong word
+
+SC is not uninformative. It is **high-precision, low-coverage**:
+
+| provider | rows where all 5 replicates agreed | accuracy when unanimous | accuracy when split |
+|---|---|---|---|
+| openai | 98.8% | 0.978 | **0.394** (n=33) |
+| mistral | 98.2% | 0.976 | **0.735** (n=34) |
+| kimi | 98.0% | 0.980 | **0.607** (n=56) |
+
+When these models disagree with themselves, accuracy collapses from ~98% to 39–74%. That
+is a very strong error signal — it just fires on about 2% of rows. ROC AUC rewards
+ranking across the whole distribution, so a proxy that is constant on 98% of rows scores
+poorly no matter how sharp it is on the rest.
+
+**The practical reading is the opposite of the AUC's:** "review every finding where the
+model contradicted itself across five runs" would catch a real share of errors at a very
+low false-alarm rate. AUC is the wrong lens for a low-coverage detector.
+
+The cause is task shape, not model quality. SC measures *stochastic* variation between
+runs. Closed-set extraction from a fixed report leaves reasoning models nearly
+deterministic, so there is little variation to measure. The paper's open-ended free-text
+diagnosis had genuine answer variability. This is the same theme as [[D5 result]]: the
+proxies that need the model to expose variation are the ones that degrade here.
+
+#### Result 3 — reasoning effort does almost nothing
+
+| provider | accuracy by tier |
+|---|---|
+| openai | low 0.972 · medium 0.972 · high 0.972 |
+| mistral | low 0.966 · high 0.977 |
+| kimi | low 0.975 · medium 0.974 · high 0.971 |
+
+OpenAI is identical to three decimal places across all three tiers; 948 of 950 labels are
+the same between low and high, and 26 of its 27 errors are identical across tiers. Kimi
+gets very slightly *worse* with more effort. Only Mistral improves, by 1.1 points.
+
+The axis is real — D11 measured 2.2× to 9× more output tokens at high effort — so the
+models genuinely think harder. It just does not change the answers. This reproduces the
+paper's finding of no discriminative change across temperature settings, more starkly.
+
+One notable interaction: **Mistral's CE discrimination collapses with effort**, 0.914 at
+`none` down to 0.617 at `high`. Its best uncertainty estimate came with reasoning
+switched off entirely.
+
+#### Result 4 — the models are under-confident, not over-confident
+
+CE stated confidence minus observed accuracy:
+
+| provider | low | medium | high |
+|---|---|---|---|
+| openai | −0.017 | −0.014 | −0.015 |
+| mistral | **+0.016** | — | −0.008 |
+| kimi | −0.100 | −0.100 | −0.095 |
+
+Seven of eight cells are under-confident. The paper's central calibration finding was that
+"LLMs are consistently over-confident when verbalizing their confidence."
+
+**This is where it would be easy to report the opposite of what happened.** The raw CE
+scores look alarming — means of 87–99, and 83–100 in the smoke run. But a model stating
+96% confidence *is* well calibrated when it is right 97% of the time. Savage et al. found
+over-confidence because their models were right far less often on open-ended diagnosis.
+The high base rate here does not merely add noise; it inverts the direction of the
+finding.
+
+Kimi is the outlier at −0.10, systematically understating confidence it has earned.
+OpenAI is the best calibrated (ECE 0.014–0.019).
+
+#### Standing caveats
+
+- Accuracy is ~97%, so each AUC rests on roughly 25–30 errors per cell. The CIs say so
+  (mistral/high CE: 0.511–0.717).
+- N=5 was a budget decision (D2). SC confidence takes only three values, which caps how
+  finely it can rank even where it does have signal.
+- One dataset, 50 cases, one species, one modality. The paper used 723 questions across
+  three datasets.
+- Correctness is agreement with a single manual annotation pass, not the paper's two
+  blinded physicians with a third adjudicating.
+
 ---
 
 ## Reference tables
@@ -582,7 +691,8 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 | 10 | Logprobs probe — **run, all three NO** | `2fa6ddd` | 136 |
 | 13 | Analysis CLI, workbook, calibration figures | `28e3ed4` | 147 |
 | 11 | Tier/token calibration — **run, ~$0.34** | `f3d4214` | 155 |
-| 12 | The paid run — in progress | | |
+| — | CE retry fix, found mid-run | `e28a346` | 156 |
+| 12 | **The paid run — complete, $24.62** | | |
 | 14 | **skipped** — TLP not buildable, see D5 result | — | — |
 
 All free work is done. The analysis half was verified end to end on synthetic JSONL
@@ -631,10 +741,20 @@ $7.03, kimi $13.98 — **$22.31 total**, against the $23.50 hand estimate in D3.
 
 - [x] ~~Task 13 — `uq_analyze_main.py`~~ — done 2026-08-08
 - [x] ~~Task 11 — smoke run per tier~~ — done 2026-08-08, ~$0.34, see D11
-- [ ] Task 12 — the paid run (~$25.51: openai $0.78, kimi $14.96, mistral $9.76)
-- [ ] After the run: re-run `read_smoke.py` to compare estimate against actual, and
-      record real spend here
+- [x] ~~Task 12 — the paid run~~ — done 2026-08-08, **$24.62**, see D14
+- [x] ~~Record real spend~~ — in D14; every provider within 4% of estimate
+
+**The study is complete.** Everything below is optional follow-on work.
+
 - [ ] Decide whether to re-run base classification on `gpt-5.6-luna` for consistency with D3
+- [ ] Consider reporting SC as a low-coverage error detector (precision/recall at the
+      "not unanimous" threshold) alongside its AUC — see D14 Result 2. AUC understates it
+      badly, and the practical framing is more useful than the headline number.
+- [ ] Raise N to 15 to test whether SC's coverage problem is an artefact of N=5 or
+      intrinsic to the task. At ~3× the budget this is the single most informative
+      follow-up.
+- [ ] Investigate why Kimi is systematically 10 points under-confident where the other
+      two are within 2 points
 - [x] ~~Run the logprobs probe (D5)~~ — done 2026-08-08, all three NO, Task 14 skipped
 
 ## Changelog
