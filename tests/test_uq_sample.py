@@ -1,11 +1,57 @@
-"""JSONL persistence and the resume arithmetic that makes a crash cost nothing."""
+"""JSONL persistence, resume arithmetic, and the two calls that spend money."""
 
+import pytest
+
+from classifier import config as classifier_config
+from classifier.prompt import load_prompt
+from classifier.schemas import FindingName, RadiologyCase
+from uncertainty.config import CE_PROMPT_FILE
 from uncertainty.sample import (
     append_record,
+    elicit_confidence,
     labels_from_record,
     read_samples,
+    render_ce_messages,
     replicate_shortfall,
+    sample_replicate,
 )
+from uncertainty.schemas import CaseConfidence, CaseLabels, FindingConfidence, FindingVote
+
+CASE = RadiologyCase(
+    case_id="12345",
+    findings_text="A minimal to mild diffuse bronchial pattern is present.",
+    conclusions_text="1. Minimal-mild diffuse bronchial pulmonary pattern.",
+)
+
+
+class FakeRaw:
+    usage_metadata = {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150}
+    response_metadata: dict = {}
+
+
+class FakeModel:
+    """Returns one canned parsed object, recording the messages it was sent."""
+
+    def __init__(self, parsed):
+        self.parsed = parsed
+        self.messages = None
+
+    def with_structured_output(self, _schema, include_raw=False):
+        return self
+
+    def invoke(self, messages):
+        self.messages = messages
+        return {"parsed": self.parsed, "raw": FakeRaw(), "parsing_error": None}
+
+
+@pytest.fixture
+def classification_prompt():
+    return load_prompt(classifier_config.PROMPT_FILE)
+
+
+@pytest.fixture
+def ce_prompt():
+    return load_prompt(CE_PROMPT_FILE)
 
 
 def _record(case_id: str, replicate: int, **labels) -> dict:
@@ -102,3 +148,107 @@ def test_shortfall_ignores_cases_not_asked_for(tmp_path):
 
 def test_labels_are_extracted_from_a_record():
     assert labels_from_record(_record("A", 1))["cardiomegaly"] == "normal"
+
+
+# --- the two calls that spend money -------------------------------------------------
+
+
+def test_ce_messages_include_every_proposed_label(ce_prompt):
+    messages = render_ce_messages(
+        ce_prompt, CASE, {"cardiomegaly": "abnormal", "pneumonia": "normal"}
+    )
+
+    text = messages[-1].content
+    assert "cardiomegaly: abnormal" in text
+    assert "pneumonia: normal" in text
+    assert CASE.findings_text in text
+    assert CASE.conclusions_text in text
+
+
+def test_ce_messages_list_all_nineteen_findings(ce_prompt):
+    """Even findings absent from the label dict get a line, defaulted to normal."""
+    messages = render_ce_messages(ce_prompt, CASE, {"cardiomegaly": "abnormal"})
+
+    text = messages[-1].content
+    for finding in FindingName:
+        assert f"- {finding.value}: " in text
+
+
+def test_ce_messages_have_a_system_and_a_user_message(ce_prompt):
+    messages = render_ce_messages(ce_prompt, CASE, {"cardiomegaly": "normal"})
+    assert len(messages) == 2
+
+
+def test_sample_replicate_builds_a_complete_record(classification_prompt):
+    parsed = CaseLabels(
+        case_id="ignored",
+        findings=[FindingVote(finding=FindingName.cardiomegaly, label="abnormal")],
+    )
+
+    record = sample_replicate(
+        FakeModel(parsed), classification_prompt, CASE, "kimi", "low", replicate=1
+    )
+
+    assert record["case_id"] == "12345"
+    assert record["replicate"] == 1
+    assert record["provider"] == "kimi"
+    assert record["tier"] == "low"
+    assert record["labels"]["cardiomegaly"] == "abnormal"
+    assert record["usage"]["output_tokens"] == 50
+    assert record["logprobs"] is None
+    assert "timestamp" in record
+
+
+def test_unreturned_findings_default_to_normal(classification_prompt):
+    """Matches csv_io.build_label_row: silence means normal."""
+    record = sample_replicate(
+        FakeModel(CaseLabels(case_id="ignored", findings=[])),
+        classification_prompt,
+        CASE,
+        "kimi",
+        "low",
+        replicate=1,
+    )
+
+    assert len(record["labels"]) == 19
+    assert set(record["labels"].values()) == {"normal"}
+
+
+def test_every_record_carries_all_nineteen_findings(classification_prompt):
+    """build_rows indexes labels by name, so a partial dict would drop findings."""
+    parsed = CaseLabels(
+        case_id="ignored",
+        findings=[FindingVote(finding=FindingName.pneumonia, label="abnormal")],
+    )
+    record = sample_replicate(
+        FakeModel(parsed), classification_prompt, CASE, "kimi", "low", replicate=3
+    )
+
+    assert set(record["labels"]) == {f.value for f in FindingName}
+
+
+def test_elicit_confidence_builds_a_score_record(ce_prompt):
+    parsed = CaseConfidence(
+        case_id="ignored",
+        scores=[FindingConfidence(finding=FindingName.cardiomegaly, score=85)],
+    )
+
+    record = elicit_confidence(
+        FakeModel(parsed), ce_prompt, CASE, {"cardiomegaly": "abnormal"}, "kimi", "low"
+    )
+
+    assert record["case_id"] == "12345"
+    assert record["scores"]["cardiomegaly"] == 85
+    assert record["provider"] == "kimi"
+    assert record["tier"] == "low"
+
+
+def test_unparseable_ce_raises_rather_than_writing_a_blank_score(ce_prompt):
+    class Unparseable(FakeModel):
+        def invoke(self, messages):
+            return {"parsed": None, "raw": FakeRaw(), "parsing_error": "bad json"}
+
+    with pytest.raises(RuntimeError, match="12345"):
+        elicit_confidence(
+            Unparseable(None), ce_prompt, CASE, {"cardiomegaly": "abnormal"}, "kimi", "low"
+        )
