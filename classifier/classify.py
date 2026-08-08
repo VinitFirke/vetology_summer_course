@@ -70,6 +70,39 @@ def backoff_seconds(attempt: int) -> int:
     return min(60, 5 * 2**attempt)
 
 
+def invoke_structured(
+    structured: object,
+    messages: list,
+    description: str,
+    max_attempts: int = 10,
+) -> tuple[BaseModel, object]:
+    """Invoke a structured model, retrying transient failures. Returns (parsed, raw).
+
+    Every paid call in this codebase goes through here, so there is one backoff policy
+    rather than one per call site. That matters more than it sounds: the uncertainty
+    runs' CE call originally invoked the model directly, and lost ~11% of Kimi's
+    responses to intermittently fenced JSON that a single retry would have cleared.
+    """
+    last_error: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            response = structured.invoke(messages)
+            parsed = response.get("parsed")
+            if parsed is None:
+                raise ValueError(
+                    f"Model returned unparseable output: {response.get('parsing_error')}"
+                )
+            return parsed, response.get("raw")
+        except Exception as error:  # noqa: BLE001 - retry any provider-side failure
+            last_error = error
+            if attempt < max_attempts - 1:
+                time.sleep(backoff_seconds(attempt))
+
+    raise RuntimeError(
+        f"{description} failed after {max_attempts} attempts: {last_error}"
+    ) from last_error
+
+
 def classify_case(
     model: BaseChatModel,
     prompt: Prompt,
@@ -89,23 +122,9 @@ def classify_case(
     structured = model.with_structured_output(schema, include_raw=True)
     messages = render_messages(prompt, case)
 
-    last_error: Exception | None = None
-    for attempt in range(max_attempts):
-        try:
-            response = structured.invoke(messages)
-            parsed = response.get("parsed")
-            if parsed is None:
-                raise ValueError(
-                    f"Model returned unparseable output: {response.get('parsing_error')}"
-                )
-            # Providers do not always echo the case id back correctly.
-            parsed.case_id = case.case_id
-            return CaseResult(classification=parsed, usage=_usage_from_raw(response.get("raw")))
-        except Exception as error:  # noqa: BLE001 - retry any provider-side failure
-            last_error = error
-            if attempt < max_attempts - 1:
-                time.sleep(backoff_seconds(attempt))
-
-    raise RuntimeError(
-        f"Case {case.case_id} failed after {max_attempts} attempts: {last_error}"
-    ) from last_error
+    parsed, raw = invoke_structured(
+        structured, messages, f"Case {case.case_id}", max_attempts
+    )
+    # Providers do not always echo the case id back correctly.
+    parsed.case_id = case.case_id
+    return CaseResult(classification=parsed, usage=_usage_from_raw(raw))

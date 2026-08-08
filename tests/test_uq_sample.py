@@ -249,10 +249,42 @@ def test_unparseable_ce_raises_rather_than_writing_a_blank_score(ce_prompt):
         def invoke(self, messages):
             return {"parsed": None, "raw": FakeRaw(), "parsing_error": "bad json"}
 
-    with pytest.raises(RuntimeError, match="12345"):
+    with pytest.raises(RuntimeError, match="CE for case 12345 failed after 3 attempts"):
         elicit_confidence(
-            Unparseable(None), ce_prompt, CASE, {"cardiomegaly": "abnormal"}, "kimi", "low"
+            Unparseable(None), ce_prompt, CASE, {"cardiomegaly": "abnormal"},
+            "kimi", "low", max_attempts=3,
         )
+
+
+def test_ce_retries_a_transient_failure_then_succeeds(ce_prompt):
+    """Kimi intermittently fences its JSON in ```; one retry clears it.
+
+    Regression test: CE originally had no retry, and lost ~11% of Kimi's responses to
+    exactly this while the replicate calls, which do retry, lost none.
+    """
+    good = CaseConfidence(
+        case_id="ignored",
+        scores=[FindingConfidence(finding=FindingName.cardiomegaly, score=85)],
+    )
+
+    class FlakyThenFine(FakeModel):
+        def __init__(self):
+            super().__init__(good)
+            self.calls = 0
+
+        def invoke(self, messages):
+            self.calls += 1
+            if self.calls == 1:
+                return {"parsed": None, "raw": FakeRaw(), "parsing_error": "```{...}"}
+            return {"parsed": good, "raw": FakeRaw(), "parsing_error": None}
+
+    model = FlakyThenFine()
+    record = elicit_confidence(
+        model, ce_prompt, CASE, {"cardiomegaly": "abnormal"}, "kimi", "low"
+    )
+
+    assert model.calls == 2
+    assert record["scores"]["cardiomegaly"] == 85
 
 
 # --- run planning -------------------------------------------------------------------

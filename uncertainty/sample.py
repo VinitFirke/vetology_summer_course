@@ -14,7 +14,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel
 
-from classifier.classify import classify_case
+from classifier.classify import classify_case, invoke_structured
 from classifier.prompt import Prompt
 from classifier.schemas import NORMAL, FindingName, RadiologyCase
 from uncertainty.config import CostEstimate, Tier, estimate_cost
@@ -149,23 +149,24 @@ def elicit_confidence(
     labels: dict[str, str],
     provider: str,
     tier: str,
+    max_attempts: int = 10,
 ) -> dict:
     """Step 2 of CE: ask the model to rate the labels it just produced.
+
+    Retries on the same policy as the replicate calls. It originally did not, and Kimi
+    lost ~11% of its CE responses to intermittently markdown-fenced JSON that a single
+    retry clears - while its replicate calls, which went through classify_case, had a
+    100% success rate against the same provider on the same mechanism.
 
     Raises rather than returning a partial record, so the caller logs a failure instead
     of writing scores that were never actually elicited.
     """
     messages = render_ce_messages(ce_prompt, case, labels)
     structured = model.with_structured_output(CaseConfidence, include_raw=True)
-    response = structured.invoke(messages)
 
-    parsed = response.get("parsed")
-    if parsed is None:
-        raise RuntimeError(
-            f"CE for case {case.case_id} was unparseable: {response.get('parsing_error')}"
-        )
-
-    raw = response.get("raw")
+    parsed, raw = invoke_structured(
+        structured, messages, f"CE for case {case.case_id}", max_attempts
+    )
     usage = getattr(raw, "usage_metadata", None) or {}
 
     return {
