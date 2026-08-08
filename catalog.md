@@ -425,7 +425,9 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 | — | Phase 1+2 baseline committed | `18b5db7` | 39 |
 | 1 | Slim schemas, generic `classify_case` | `df92567` | 47 |
 | 2 | Config, effort table, cost estimator | `042deb4` | 56 |
-| 3–14 | not started | | |
+| 3 | SC and CE proxy primitives | `0beb4f3` | 63 |
+| 4 | Row assembly, gold join, exclusions | `7ee2274` | 75 |
+| 5–14 | not started | | |
 
 **Two corrections Task 1 forced**, both recorded in `plan.md`:
 
