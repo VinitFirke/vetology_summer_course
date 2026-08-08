@@ -5,11 +5,12 @@ import pytest
 from classifier import config as classifier_config
 from classifier.prompt import load_prompt
 from classifier.schemas import FindingName, RadiologyCase
-from uncertainty.config import CE_PROMPT_FILE
+from uncertainty.config import CE_PROMPT_FILE, TIERS
 from uncertainty.sample import (
     append_record,
     elicit_confidence,
     labels_from_record,
+    plan_run,
     read_samples,
     render_ce_messages,
     replicate_shortfall,
@@ -252,3 +253,90 @@ def test_unparseable_ce_raises_rather_than_writing_a_blank_score(ce_prompt):
         elicit_confidence(
             Unparseable(None), ce_prompt, CASE, {"cardiomegaly": "abnormal"}, "kimi", "low"
         )
+
+
+# --- run planning -------------------------------------------------------------------
+
+
+def _cases(n: int) -> list[RadiologyCase]:
+    return [
+        RadiologyCase(case_id=str(i), findings_text="text", conclusions_text="text")
+        for i in range(n)
+    ]
+
+
+def test_a_fresh_plan_requests_every_replicate(tmp_path):
+    plan = plan_run("openai", ("low",), _cases(3), replicates=5, uq_dir=tmp_path)
+
+    assert plan.work == {("low", "0"): 5, ("low", "1"): 5, ("low", "2"): 5}
+    assert plan.ce_needed == {("low", "0"), ("low", "1"), ("low", "2")}
+    assert plan.remaining_calls == 18  # 15 replicates + 3 CE
+
+
+def test_a_plan_subtracts_work_already_on_disk(tmp_path):
+    path = tmp_path / "samples_openai_low.jsonl"
+    append_record(path, _record("0", 1))
+    append_record(path, _record("0", 2))
+
+    plan = plan_run("openai", ("low",), _cases(2), replicates=5, uq_dir=tmp_path)
+
+    assert plan.work[("low", "0")] == 3
+    assert plan.work[("low", "1")] == 5
+
+
+def test_a_finished_case_drops_out_of_the_plan_entirely(tmp_path):
+    samples = tmp_path / "samples_openai_low.jsonl"
+    for replicate in range(1, 6):
+        append_record(samples, _record("0", replicate))
+    append_record(tmp_path / "ce_openai_low.jsonl", {"case_id": "0", "scores": {}})
+
+    plan = plan_run("openai", ("low",), _cases(1), replicates=5, uq_dir=tmp_path)
+
+    assert plan.work == {}
+    assert plan.ce_needed == set()
+    assert plan.is_empty
+    assert plan.estimate.dollars == 0.0
+
+
+def test_ce_alone_can_remain_outstanding(tmp_path):
+    """Replicates complete but the CE call failed - only CE should be rescheduled."""
+    samples = tmp_path / "samples_openai_low.jsonl"
+    for replicate in range(1, 6):
+        append_record(samples, _record("0", replicate))
+
+    plan = plan_run("openai", ("low",), _cases(1), replicates=5, uq_dir=tmp_path)
+
+    assert plan.work == {}
+    assert plan.ce_needed == {("low", "0")}
+    assert not plan.is_empty
+    assert plan.remaining_calls == 1
+
+
+def test_each_tier_is_planned_independently(tmp_path):
+    for replicate in range(1, 6):
+        append_record(tmp_path / "samples_openai_low.jsonl", _record("0", replicate))
+
+    plan = plan_run("openai", ("low", "high"), _cases(1), replicates=5, uq_dir=tmp_path)
+
+    assert ("low", "0") not in plan.work
+    assert plan.work[("high", "0")] == 5
+
+
+def test_the_plan_costs_only_the_remaining_work(tmp_path):
+    full = plan_run("openai", TIERS, _cases(50), replicates=5, uq_dir=tmp_path)
+    partial = plan_run("openai", ("low",), _cases(2), replicates=5, uq_dir=tmp_path)
+
+    assert full.remaining_calls == 50 * 5 * 3 + 50 * 3
+    assert full.estimate.dollars > partial.estimate.dollars
+    assert partial.estimate.dollars > 0
+
+
+def test_a_half_done_run_costs_less_than_a_fresh_one(tmp_path):
+    fresh = plan_run("kimi", ("low",), _cases(4), replicates=5, uq_dir=tmp_path)
+    for case_id in ("0", "1"):
+        for replicate in range(1, 6):
+            append_record(tmp_path / "samples_kimi_low.jsonl", _record(case_id, replicate))
+
+    resumed = plan_run("kimi", ("low",), _cases(4), replicates=5, uq_dir=tmp_path)
+
+    assert resumed.estimate.dollars < fresh.estimate.dollars
