@@ -418,9 +418,32 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 
 ---
 
+## Implementation progress
+
+| Task | Status | Commit | Tests |
+|---|---|---|---|
+| — | Phase 1+2 baseline committed | `18b5db7` | 39 |
+| 1 | Slim schemas, generic `classify_case` | `df92567` | 47 |
+| 2 | Config, effort table, cost estimator | `042deb4` | 56 |
+| 3–14 | not started | | |
+
+**Two corrections Task 1 forced**, both recorded in `plan.md`:
+
+1. `CaseResult.classification` was pinned to `CaseClassification`, so returning a
+   `CaseLabels` raised `ValidationError`. `CaseResult` is now generic over the answer
+   schema (`CaseResult[SchemaT]`), which keeps `main.py`'s type precision while admitting
+   the slim shape. D7b understated the change as "one default argument"; it is two.
+2. The retry-backoff sleep patch moved from `tests/test_classify.py` into `conftest.py`.
+   A new test module did not inherit the module-local fixture, so the failure above slept
+   5+10+20+40+60×6 ≈ seven minutes before reporting. The symptom (a hang) looked nothing
+   like the cause (a validation error).
+
+Measured estimator output at 50 cases × 5 replicates × 3 tiers: openai $1.31, mistral
+$7.03, kimi $13.98 — **$22.31 total**, against the $23.50 hand estimate in D3.
+
 ## Open items
 
-- [ ] Execute the implementation plan (`plan.md`, Phase 3, Tasks 1–14)
+- [ ] Continue the implementation plan (`plan.md`, Phase 3, Tasks 3–14)
 - [ ] Run the logprobs probe (D5) and record the result here
 - [ ] Replace estimated effort multipliers with measured ones from a 2-case smoke run per tier
 - [ ] Verify each provider accepts its three effort strings (D4) — especially Mistral's `none`
