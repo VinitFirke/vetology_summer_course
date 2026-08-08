@@ -477,6 +477,74 @@ for. It also means $9.76 is a conservative ceiling; the median implies nearer $7
 **Consequence for the results table.** Mistral has two tiers where the others have three,
 and the sampling-noise floor is no longer measured. One footnote.
 
+### D12 — First results: OpenAI (`gpt-5.6-luna`)
+
+**Run 2026-08-08.** 750 replicates + 150 CE across three tiers, zero failures, ~$0.78.
+5,700 proxy rows. Bootstrap 1000, clustered by case.
+
+| tier | proxy | n | AUC | 95% CI | ECE | Brier | mean conf | obs. acc | ≥0.7 |
+|---|---|---|---|---|---|---|---|---|---|
+| low | SC | 950 | 0.627 | 0.557–0.723 | 0.025 | 0.025 | 0.997 | 0.972 | no |
+| low | **CE** | 950 | **0.787** | 0.641–0.891 | 0.019 | 0.024 | 0.956 | 0.974 | **yes** |
+| medium | SC | 950 | 0.608 | 0.534–0.682 | 0.026 | 0.026 | 0.997 | 0.972 | no |
+| medium | **CE** | 950 | **0.820** | 0.713–0.898 | 0.014 | 0.024 | 0.957 | 0.972 | **yes** |
+| high | SC | 950 | 0.628 | 0.551–0.698 | 0.026 | 0.026 | 0.997 | 0.972 | no |
+| high | **CE** | 950 | **0.775** | 0.679–0.867 | 0.017 | 0.025 | 0.956 | 0.971 | **yes** |
+
+**CE beats SC at every tier, and only CE clears 0.7. This reverses the paper**, which
+found SC best (ROC AUC 0.68–0.79) and CE worst.
+
+**The mechanism is in the data, not speculation.** SC confidence is exactly `1.0` on
+**2,817 of 2,850 rows (98.8%)** — only 33 rows saw any disagreement across five
+replicates. SC measures *stochastic* variation between runs; on closed-set extraction
+from a fixed text, a reasoning model is very nearly deterministic, so SC has almost
+nothing to measure and saturates. CE spans 0.25–1.0 and keeps its signal. The paper's
+open-ended free-text task had real answer variability for SC to detect; this one does
+not. See [[D5 result]] for the same theme — the proxies that depend on the model
+exposing variation are the ones that fail here.
+
+**Reasoning effort changed essentially nothing:**
+
+- **948 of 950 labels identical** between low and high effort (99.8%)
+- **26 of 27 errors identical** across all three tiers; low and medium share the *same*
+  error set exactly
+- observed accuracy 0.972 at every tier
+
+The paper reported no change in discriminative performance across temperature settings.
+The effort substitution reproduces that, more starkly — the axis is real (token counts
+differ 2.2× between low and high, D11) but it does not move the answers.
+
+**Three caveats that must appear in any write-up.**
+
+1. Accuracy is 97.2%, so the AUC rests on **27 errors per tier**. That is what the wide
+   CIs are saying (CE low: 0.641–0.891).
+2. The excellent ECE (0.014–0.026) is partly arithmetic: when accuracy is 97% and stated
+   confidence is 96%, they agree almost by coincidence rather than by calibration.
+3. CE here is slightly **under**-confident (0.956 stated, 0.974 observed) — the reverse
+   of the paper's central finding, and again a consequence of the high base rate. Note
+   this contradicts the raw CE scores looking extreme (83–100 in D11): a mean score of 96
+   *is* well calibrated when the model is right 97% of the time.
+
+**Clinically:** `bronchitis` accounts for 26 of the errors across tiers, well ahead of
+`Alveolar_interstitial_pattern` (12) and `pulmonary_nodules` (10).
+
+### D13 — CE had no retry (fixed mid-run)
+
+**Found 2026-08-08 during the Kimi run.** Kimi intermittently wraps structured output in
+a markdown fence, so the payload begins with ` ``` ` and fails JSON parsing. Its
+*replicate* calls hit the same thing and were unaffected — 250/250 on the low tier —
+because they route through `classify_case`, which retries ten times. `elicit_confidence`
+invoked the model directly, so one fenced response permanently lost that case's CE.
+~11% of CE calls were being dropped.
+
+Fixed by extracting the loop into `classify.invoke_structured` and routing both callers
+through it, rather than giving CE a second copy that would drift. This is the same
+argument that put the `schema` argument on `classify_case` in D7b; CE should have gone
+through it then, and the plan's omission is why it did not.
+
+Cheap to repair thanks to D7's resume design: `plan_run` tracks replicates and CE
+separately, so a resume pass re-requests only the failed CE calls.
+
 ---
 
 ## Reference tables
