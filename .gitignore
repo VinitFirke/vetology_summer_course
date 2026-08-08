@@ -4,6 +4,7 @@ __pycache__/
 .env
 dataset_gold_standard/
 dataset_LLM_classification/
+dataset_LLM_uncertainty/
 plan.md
 .pytest_cache/
 logs/
