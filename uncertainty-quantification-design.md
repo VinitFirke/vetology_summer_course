@@ -54,7 +54,15 @@ The three proxies:
 |---|---|---|
 | **SC** — sample consistency | Run the prompt N times, measure agreement | N−1 calls per case per tier |
 | **CE** — confidence elicitation | Ask the model to rate its own certainty 0–100 | 1 call per case per tier |
-| **TLP** — token-level probability | Read the probability of the emitted label token | none (rides on replicate 1) |
+| ~~**TLP**~~ | ~~Read the probability of the emitted label token~~ | **not buildable — see below** |
+
+> **TLP was dropped after measurement, 2026-08-08.** The capability probe found that none
+> of the three providers returns token logprobs through `with_structured_output`: all
+> three calls succeeded and came back without the field. **CE and SC are the final proxy
+> set.** Sections below that describe TLP are retained as design rationale, and the D5
+> result in `catalog.md` records the measurement. This is reportable rather than a gap —
+> the paper found TLP the weakest proxy and observed it degrading on newer models;
+> finding it unavailable on three 2026-era reasoning models extends that trend.
 
 The paper's headline: SC discriminates best (ROC AUC 0.68–0.79), TLP and CE are weaker,
 and CE is consistently over-confident.

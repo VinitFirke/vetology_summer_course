@@ -165,6 +165,38 @@ which is itself a legitimate finding.
 **Rejected.** Skipping TLP outright (loses the most technically interesting plumbing);
 committing to TLP on OpenAI without checking (risks dead code).
 
+#### D5 result — measured 2026-08-08
+
+`python -m uncertainty.probe`, three calls, ~$0.05:
+
+| provider | model | logprobs | detail |
+|---|---|---|---|
+| openai | `gpt-5.6-luna` | **NO** | response carried no logprobs field |
+| mistral | `mistral-medium-latest` | **NO** | response carried no logprobs field |
+| kimi | `kimi-k3` | **NO** | response carried no logprobs field |
+
+**TLP is not buildable. CE and SC are the final proxy set.** Task 14 in `plan.md` is
+skipped.
+
+Worth noting *how* they failed: all three calls **succeeded** and simply came back
+without the field — none raised, not even Mistral, whose API has no logprobs parameter
+at all. That is the silent-omission failure mode the probe existed to catch. Had TLP been
+built on the assumption it worked, it would have produced nothing and the gap would only
+have surfaced during analysis, after a full paid run.
+
+**Scope of this finding.** The probe exercises logprobs through
+`with_structured_output`, which is the path this pipeline actually uses. A raw
+Chat Completions call without structured output might behave differently on some
+providers, but that is not a path this codebase takes, so the answer is decisive for our
+purposes. Reasoning models declining logprobs is also the documented expectation for the
+OpenAI o-series and gpt-5 families.
+
+**Consequences.** The `logprobs` field stays on every JSONL record as `null` — it
+documents that the question was asked. The results workbook will carry two proxies per
+tier rather than three. This is reportable rather than a gap: the paper's own conclusion
+is that SC beats TLP and CE nearly everywhere, and that TLP degraded on newer models —
+finding it unavailable on three 2026-era reasoning models extends that trend.
+
 ### D6 — Architecture: new `uncertainty/` package, sibling to `classifier/`
 
 **Decided 2026-08-07.**
@@ -432,7 +464,11 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 | 7 | JSONL persistence and resume | `dec03b1` | 105 |
 | 8 | Replicate call, two-step CE call, CE prompt | `55b5fa3` | 113 |
 | 9 | Sampling CLI, cost guard, thread pool | `90944e9` | 128 |
-| 10–14 | not started — **Task 10 is the first that spends money** | | |
+| 10 | Logprobs probe — **run, all three NO** | `2fa6ddd` | 136 |
+| 11–13 | not started | | |
+| 14 | **skipped** — TLP not buildable, see D5 result | — | — |
+
+**Spent so far: ~$0.05** (the probe). Remaining budget ~$22 against ~$40.
 
 **Added beyond the plan in Task 9:** `tests/test_uq_main.py`. `run_one_tier` decides how
 many calls to make, so it is the one code path where a bug costs real dollars, and the
@@ -469,11 +505,14 @@ $7.03, kimi $13.98 — **$22.31 total**, against the $23.50 hand estimate in D3.
 
 ## Open items
 
-- [ ] Continue the implementation plan (`plan.md`, Phase 3, Tasks 3–14)
-- [ ] Run the logprobs probe (D5) and record the result here
-- [ ] Replace estimated effort multipliers with measured ones from a 2-case smoke run per tier
-- [ ] Verify each provider accepts its three effort strings (D4) — especially Mistral's `none`
+- [ ] Task 13 — `uq_analyze_main.py` (free, offline)
+- [ ] Task 11 — smoke run per tier (~$0.50): replace estimated effort multipliers with
+      measured ones, **and** verify each provider accepts its three effort strings (D4),
+      especially Mistral's `none`. If a provider's low and high output token counts match
+      within ~10%, the effort knob is being ignored.
+- [ ] Task 12 — the paid run (~$22)
 - [ ] Decide whether to re-run base classification on `gpt-5.6-luna` for consistency with D3
+- [x] ~~Run the logprobs probe (D5)~~ — done 2026-08-08, all three NO, Task 14 skipped
 
 ## Changelog
 
