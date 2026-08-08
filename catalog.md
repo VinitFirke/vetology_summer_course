@@ -419,20 +419,67 @@ in the new package touches a key. `.gitignore` gains `dataset_LLM_uncertainty/` 
 
 ---
 
+### D11 — Measured tokens, and dropping Mistral's duplicate tier
+
+**Measured 2026-08-08** by the Task 11 smoke run: 36 calls, 3 providers × 3 tiers × 2
+cases × 1 replicate, ~$0.34. **No failures anywhere.**
+
+Mean tokens per replicate call, slim `CaseLabels` schema:
+
+| provider | tier | effort | input | output |
+|---|---|---|---|---|
+| openai | low / medium / high | `low` / `medium` / `high` | 1009 | 416 / 474 / 904 |
+| mistral | low | `none` | 1018 | 360 |
+| mistral | medium / high | `high` (same config) | 1018 | pooled 3795 |
+| kimi | low / medium / high | `low` / `high` / `max` | ~1173 | 308 / 1018 / 1330 |
+
+**Three risks cleared.** Mistral accepts `none`, and it plainly works — 360 output tokens
+against 3795 at `high`. No provider silently ignores the effort knob; all three show
+clear separation across tiers. CE works live on all three, returning 19 valid scores
+every time.
+
+**An early sighting of the paper's headline.** Mean CE scores across all 18 CE calls ran
+**83–100**. That is severe over-confidence before a single case has been scored.
+
+**The estimator was restructured, not just re-tuned.** `BASELINE_TOKENS ×
+SLIM_OUTPUT_FACTOR × EFFORT_OUTPUT_MULTIPLIER` is replaced by `MEASURED_TOKENS` and
+`MEASURED_CE_TOKENS`, indexed per provider per tier. A single global multiplier could not
+represent what was measured: the low tier is 0.88× medium on openai but **0.06×** on
+mistral, whose low tier disables reasoning outright. CE output likewise spans 259–3171
+tokens across tiers where the old estimate assumed a flat 800. Four constants removed,
+replaced by data.
+
+**The measurements moved the budget a long way:**
+
+| provider | estimated | measured | budget | |
+|---|---|---|---|---|
+| openai | $1.31 | **$0.78** | $10 | ok |
+| mistral | $7.03 | **$18.50** | $10 | **over** |
+| kimi | $13.98 | **$14.96** | $20 | ok |
+
+`test_full_run_lands_inside_the_budget` is what caught it — written speculatively in
+Task 2, it went red on the honest numbers, which is exactly its job.
+
+**Decision: Mistral runs low + high only.** Its medium tier maps to the same
+`effort=high` string, so it was a duplicate condition kept as a sampling-noise control
+while that was free. Measured at $8.61 it is not worth that. `PROVIDER_TIERS` now encodes
+per-provider tier sets; Mistral lands at $9.76.
+
+**Rejected.** Switching to `mistral-medium-3` at $0.40/$2.00 (~$4.94, but an older model
+and unverified effort support); cutting Mistral to 25 cases (ragged dataset, CIs widen
+~1.4×); dropping Mistral entirely.
+
+**Caveat carried in the config.** Mistral's 3795 is the mean of `[2033, 9622, 1870,
+1654]` — one runaway reasoning trace inflates it. The mean rather than the median is used
+deliberately: a budget guard should over-estimate, and outliers are what you get billed
+for. It also means $9.76 is a conservative ceiling; the median implies nearer $7.
+
+**Consequence for the results table.** Mistral has two tiers where the others have three,
+and the sampling-noise floor is no longer measured. One footnote.
+
+---
+
 ## Reference tables
-
-### Measured token baselines
-
-From `logs/token_usage.md`, at medium effort, per case:
-
-| Model | input | output |
-|---|---|---|
-| `gpt-5.5` | 1,064 | 1,384 |
-| `mistral-large` | ~1,050 | ~1,050 |
-| `kimi-k3` (at high) | 1,208 | 1,712 |
-
-Effort multipliers on output are **estimates**: low ≈ 0.5×, high ≈ 2.5× vs medium.
-To be replaced with measured values from a 2-case smoke run per tier before the full run.
 
 ### Prices per 1M tokens (checked 2026-08-07)
 
@@ -466,7 +513,8 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 | 9 | Sampling CLI, cost guard, thread pool | `90944e9` | 128 |
 | 10 | Logprobs probe — **run, all three NO** | `2fa6ddd` | 136 |
 | 13 | Analysis CLI, workbook, calibration figures | `28e3ed4` | 147 |
-| 11–12 | not started — **both spend money** | | |
+| 11 | Tier/token calibration — **run, ~$0.34** | `f3d4214` | 155 |
+| 12 | The paid run — in progress | | |
 | 14 | **skipped** — TLP not buildable, see D5 result | — | — |
 
 All free work is done. The analysis half was verified end to end on synthetic JSONL
@@ -514,11 +562,10 @@ $7.03, kimi $13.98 — **$22.31 total**, against the $23.50 hand estimate in D3.
 ## Open items
 
 - [x] ~~Task 13 — `uq_analyze_main.py`~~ — done 2026-08-08
-- [ ] Task 11 — smoke run per tier (~$0.50): replace estimated effort multipliers with
-      measured ones, **and** verify each provider accepts its three effort strings (D4),
-      especially Mistral's `none`. If a provider's low and high output token counts match
-      within ~10%, the effort knob is being ignored.
-- [ ] Task 12 — the paid run (~$22)
+- [x] ~~Task 11 — smoke run per tier~~ — done 2026-08-08, ~$0.34, see D11
+- [ ] Task 12 — the paid run (~$25.51: openai $0.78, kimi $14.96, mistral $9.76)
+- [ ] After the run: re-run `read_smoke.py` to compare estimate against actual, and
+      record real spend here
 - [ ] Decide whether to re-run base classification on `gpt-5.6-luna` for consistency with D3
 - [x] ~~Run the logprobs probe (D5)~~ — done 2026-08-08, all three NO, Task 14 skipped
 
