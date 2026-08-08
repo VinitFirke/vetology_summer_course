@@ -67,6 +67,21 @@ def test_high_tier_costs_more_than_low_tier():
     assert high.input_tokens == low.input_tokens  # only output scales with effort
 
 
+def test_render_reports_the_replicate_count_it_was_given():
+    """The guard's job is to state what will happen; it must not report the default."""
+    estimate = estimate_cost("openai", ("low",), n_cases=2, replicates=1)
+
+    text = estimate.render("openai", 2, ("low",), replicates=1)
+
+    assert "2 cases x 1 replicates x 1 tiers" in text
+    assert "x 5 replicates" not in text
+
+
+def test_render_falls_back_to_the_default_replicate_count():
+    estimate = estimate_cost("openai", ("low",), n_cases=2)
+    assert f"x {REPLICATES} replicates" in estimate.render("openai", 2, ("low",))
+
+
 def test_full_run_lands_inside_the_budget():
     """Guards against a price or baseline edit quietly blowing the budget."""
     budgets = {"openai": 10.0, "mistral": 10.0, "kimi": 20.0}

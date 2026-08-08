@@ -167,7 +167,7 @@ def main() -> None:
     print(f"{len(cases)} cases, {args.replicates} replicates, tiers: {', '.join(tiers)}\n")
     total = 0.0
     for provider, plan in plans.items():
-        print(plan.estimate.render(provider, len(cases), tiers))
+        print(plan.estimate.render(provider, len(cases), tiers, args.replicates))
         total += plan.estimate.dollars
     print(f"\n  TOTAL  ~${total:.2f}")
 

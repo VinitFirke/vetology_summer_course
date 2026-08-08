@@ -96,10 +96,22 @@ class CostEstimate(BaseModel):
     output_tokens: int
     dollars: float
 
-    def render(self, provider: Provider, n_cases: int, tiers: tuple[Tier, ...]) -> str:
+    def render(
+        self,
+        provider: Provider,
+        n_cases: int,
+        tiers: tuple[Tier, ...],
+        replicates: int = REPLICATES,
+    ) -> str:
+        """One provider's block of the cost guard.
+
+        `replicates` is passed in rather than read from the module constant: the guard's
+        whole job is to state accurately what is about to happen, so it must reflect the
+        --replicates the caller actually chose.
+        """
         return (
             f"{provider} / {UQ_MODEL_IDS[provider]}\n"
-            f"  {n_cases} cases x {REPLICATES} replicates x {len(tiers)} tiers "
+            f"  {n_cases} cases x {replicates} replicates x {len(tiers)} tiers "
             f"= {self.calls} calls (incl. CE)\n"
             f"  est. {self.input_tokens / 1e6:.2f}M input, "
             f"{self.output_tokens / 1e6:.2f}M output  ->  ~${self.dollars:.2f}"
