@@ -431,7 +431,14 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 | 6 | Adaptive-bin ECE, Brier, calibration points | `8564b38` | 95 |
 | 7 | JSONL persistence and resume | `dec03b1` | 105 |
 | 8 | Replicate call, two-step CE call, CE prompt | `55b5fa3` | 113 |
-| 9–14 | not started | | |
+| 9 | Sampling CLI, cost guard, thread pool | `90944e9` | 128 |
+| 10–14 | not started — **Task 10 is the first that spends money** | | |
+
+**Added beyond the plan in Task 9:** `tests/test_uq_main.py`. `run_one_tier` decides how
+many calls to make, so it is the one code path where a bug costs real dollars, and the
+plan had no test for it. Eight tests drive it end to end against a counting fake model.
+They passed first time — a weak signal — so they were mutation tested: breaking the
+shortfall subtraction so it ignores existing work turns three of them red.
 
 **A third correction, from Task 5.** The plan's bootstrap fixture was perfectly separable,
 so every draw returned AUC 1.0, both intervals collapsed to zero width, and the
