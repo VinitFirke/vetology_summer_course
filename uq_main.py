@@ -159,17 +159,24 @@ def main() -> None:
     providers = list(uq_config.UQ_PROVIDERS) if args.provider == "all" else [args.provider]
     tiers = uq_config.TIERS if args.tier == "all" else (args.tier,)
 
+    # Each provider runs its own tier set; mistral's medium duplicates its high.
+    per_provider = {p: uq_config.tiers_for(p, tiers) for p in providers}
     plans = {
-        provider: plan_run(provider, tiers, cases, args.replicates, uq_config.UQ_DIR)
+        provider: plan_run(provider, per_provider[provider], cases, args.replicates, uq_config.UQ_DIR)
         for provider in providers
+        if per_provider[provider]
     }
 
-    print(f"{len(cases)} cases, {args.replicates} replicates, tiers: {', '.join(tiers)}\n")
+    print(f"{len(cases)} cases, {args.replicates} replicates, tiers requested: {', '.join(tiers)}\n")
     total = 0.0
     for provider, plan in plans.items():
-        print(plan.estimate.render(provider, len(cases), tiers, args.replicates))
+        print(plan.estimate.render(provider, len(cases), per_provider[provider], args.replicates))
         total += plan.estimate.dollars
     print(f"\n  TOTAL  ~${total:.2f}")
+
+    skipped = [p for p in providers if not per_provider[p]]
+    if skipped:
+        print(f"  (not run at these tiers: {', '.join(skipped)})")
 
     if args.dry_run:
         print("\n(dry run - no calls made)")
@@ -182,7 +189,7 @@ def main() -> None:
         if plan.is_empty:
             print(f"\n{provider}: nothing left to do")
             continue
-        for tier in tiers:
+        for tier in per_provider[provider]:
             run_one_tier(provider, tier, settings, cases, plan, args.workers)
 
     print(f"\nSamples written to {uq_config.UQ_DIR}")

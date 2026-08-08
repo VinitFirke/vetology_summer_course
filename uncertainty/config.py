@@ -37,6 +37,30 @@ EFFORT_LEVELS: dict[Provider, dict[Tier, str]] = {
     "kimi": {"low": "low", "medium": "high", "high": "max"},
 }
 
+# Which tiers are actually run per provider.
+#
+# Mistral's medium and high map to the same effort string, so medium is a duplicate
+# condition rather than a distinct one. It was worth keeping as a sampling-noise control
+# while it was free; the 2026-08-08 smoke run measured it at $8.61, which would put
+# Mistral at $18.50 against a $10 budget. Dropping the duplicate brings it to $9.89 and
+# costs nothing but the control.
+PROVIDER_TIERS: dict[Provider, tuple[Tier, ...]] = {
+    "openai": TIERS,
+    "mistral": ("low", "high"),
+    "kimi": TIERS,
+}
+
+
+def tiers_for(provider: Provider, requested: tuple[Tier, ...] | None = None) -> tuple[Tier, ...]:
+    """The tiers actually run for a provider, optionally narrowed by a CLI --tier.
+
+    Order follows TIERS so results tables read low, medium, high regardless of provider.
+    """
+    available = PROVIDER_TIERS[provider]
+    if requested is None:
+        return available
+    return tuple(tier for tier in available if tier in requested)
+
 # Model id -> ($ per 1M input tokens, $ per 1M output tokens). Checked 2026-08-07.
 PRICES: dict[str, tuple[float, float]] = {
     "gpt-5.6-luna": (0.20, 1.20),
@@ -44,21 +68,31 @@ PRICES: dict[str, tuple[float, float]] = {
     "kimi-k3": (3.00, 15.00),
 }
 
-# Measured per-case tokens at medium effort with the FULL schema, from logs/token_usage.md.
-BASELINE_TOKENS: dict[Provider, tuple[int, int]] = {
-    "openai": (1064, 1384),
-    "mistral": (1050, 1050),
-    "kimi": (1200, 1000),
+# MEASURED 2026-08-08 by a 2-case smoke run per provider per tier, slim CaseLabels
+# schema. Mean (input, output) tokens for one replicate call.
+#
+# Replaces the earlier BASELINE_TOKENS x SLIM_OUTPUT_FACTOR x EFFORT_OUTPUT_MULTIPLIER
+# arrangement. A single global multiplier could not represent what the measurements
+# show: the low tier costs 0.88x medium on openai but 0.06x on mistral, because
+# mistral's low tier is `none`, which disables reasoning outright. Per-provider,
+# per-tier numbers are both simpler and correct.
+MEASURED_TOKENS: dict[Provider, dict[Tier, tuple[int, int]]] = {
+    "openai": {"low": (1009, 416), "medium": (1009, 474), "high": (1009, 904)},
+    # mistral's medium and high are the same configuration (effort=high), so their four
+    # samples are pooled: [2033, 9622, 1870, 1654], mean 3795. That 9622 is one runaway
+    # reasoning trace. The mean rather than the median is used deliberately - a budget
+    # guard should over-estimate, and outliers are what you actually get billed for.
+    "mistral": {"low": (1018, 360), "medium": (1018, 3795), "high": (1018, 3795)},
+    "kimi": {"low": (1173, 308), "medium": (1173, 1018), "high": (1172, 1330)},
 }
 
-# Dropping evidence and reasoning removes roughly 45% of output tokens.
-SLIM_OUTPUT_FACTOR = 0.55
-
-# One CE call: the case text plus 19 labels in, 19 integers plus thinking out.
-CE_TOKENS: tuple[int, int] = (1400, 800)
-
-# ESTIMATES. Task 11 replaces these with values measured by a 2-case smoke run per tier.
-EFFORT_OUTPUT_MULTIPLIER: dict[Tier, float] = {"low": 0.5, "medium": 1.0, "high": 2.5}
+# MEASURED the same way: one CE call per case per tier. CE output scales with effort too
+# (259 tokens at openai/low, 3171 at mistral/high), which the old flat estimate missed.
+MEASURED_CE_TOKENS: dict[Provider, dict[Tier, tuple[int, int]]] = {
+    "openai": {"low": (985, 320), "medium": (985, 426), "high": (985, 527)},
+    "mistral": {"low": (1020, 396), "medium": (1020, 2761), "high": (1020, 2761)},
+    "kimi": {"low": (1159, 282), "medium": (1159, 1306), "high": (1158, 1137)},
+}
 
 UQ_DIR = PROJECT_ROOT / "dataset_LLM_uncertainty"
 FIGURES_DIR = UQ_DIR / "figures"
@@ -124,26 +158,23 @@ def estimate_cost(
     n_cases: int,
     replicates: int = REPLICATES,
 ) -> CostEstimate:
-    """Estimate a run's cost. Input is flat per call; only output scales with effort."""
-    in_per_case, out_per_case = BASELINE_TOKENS[provider]
-    ce_in, ce_out = CE_TOKENS
+    """Estimate a run's cost from the measured per-provider, per-tier token counts."""
+    input_tokens = 0
+    output_tokens = 0
 
-    replicate_calls = n_cases * replicates * len(tiers)
-    ce_calls = n_cases * len(tiers)
-    input_tokens = replicate_calls * in_per_case + ce_calls * ce_in
-
-    output_tokens = 0.0
     for tier in tiers:
-        multiplier = EFFORT_OUTPUT_MULTIPLIER[tier]
-        output_tokens += n_cases * replicates * out_per_case * SLIM_OUTPUT_FACTOR * multiplier
-        output_tokens += n_cases * ce_out * multiplier
+        replicate_in, replicate_out = MEASURED_TOKENS[provider][tier]
+        ce_in, ce_out = MEASURED_CE_TOKENS[provider][tier]
+
+        input_tokens += n_cases * replicates * replicate_in + n_cases * ce_in
+        output_tokens += n_cases * replicates * replicate_out + n_cases * ce_out
 
     price_in, price_out = PRICES[UQ_MODEL_IDS[provider]]
     dollars = input_tokens / 1e6 * price_in + output_tokens / 1e6 * price_out
 
     return CostEstimate(
-        calls=replicate_calls + ce_calls,
+        calls=n_cases * replicates * len(tiers) + n_cases * len(tiers),
         input_tokens=input_tokens,
-        output_tokens=round(output_tokens),
+        output_tokens=output_tokens,
         dollars=round(dollars, 4),
     )

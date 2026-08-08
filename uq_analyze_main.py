@@ -79,7 +79,7 @@ def load_ce_scores(provider: str, tier: str) -> dict[str, dict[str, int]]:
 def collect_rows(provider: str, gold: dict[str, dict[str, str]]) -> list[ProxyRow]:
     """Every proxy row for one provider, across all tiers that have samples."""
     rows: list[ProxyRow] = []
-    for tier in uq_config.TIERS:
+    for tier in uq_config.tiers_for(provider):
         samples_file = uq_config.samples_path(provider, tier)
         if not samples_file.exists():
             print(f"  {provider}/{tier}: no samples, skipping")
@@ -209,7 +209,7 @@ def main() -> None:
         print(f"\n{provider}: {len(frame)} rows")
         print(summary.to_string(index=False, float_format=lambda v: f"{v:.3f}"), "\n")
 
-        for tier in uq_config.TIERS:
+        for tier in uq_config.tiers_for(provider):
             plot_calibration(frame, provider, tier)
 
     if not sheets:
