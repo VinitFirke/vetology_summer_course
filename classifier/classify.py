@@ -6,6 +6,7 @@ name that is not one of the 19.
 """
 
 import time
+from typing import Generic, TypeVar
 
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel
@@ -29,10 +30,19 @@ class Usage(BaseModel):
         )
 
 
-class CaseResult(BaseModel):
-    """What one case costs and what the model concluded."""
+SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
-    classification: CaseClassification
+
+class CaseResult(BaseModel, Generic[SchemaT]):
+    """What one case costs and what the model concluded.
+
+    Generic over the answer schema so the same retry loop serves both callers:
+    main.py gets CaseResult[CaseClassification] with evidence and reasoning, while the
+    uncertainty runs get CaseResult[CaseLabels] carrying labels alone. Pinning this to
+    CaseClassification would make the slim schema fail validation on the way out.
+    """
+
+    classification: SchemaT
     usage: Usage
 
 
@@ -64,15 +74,19 @@ def classify_case(
     model: BaseChatModel,
     prompt: Prompt,
     case: RadiologyCase,
+    schema: type[SchemaT] = CaseClassification,
     max_attempts: int = 10,
-) -> CaseResult:
+) -> CaseResult[SchemaT]:
     """Judge all 19 findings for one case.
 
     Retries with exponential backoff on transient provider errors. Raises if every
     attempt fails, so the caller can record the failure rather than write a
     silently empty row.
+
+    `schema` lets the uncertainty runs request the slim CaseLabels shape while reusing
+    this retry loop, rather than growing a second copy of it that drifts.
     """
-    structured = model.with_structured_output(CaseClassification, include_raw=True)
+    structured = model.with_structured_output(schema, include_raw=True)
     messages = render_messages(prompt, case)
 
     last_error: Exception | None = None
