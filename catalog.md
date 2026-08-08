@@ -465,8 +465,16 @@ still bill; the 2026-08-02 Mistral run had 17/50 failures. Budget 10–20% headr
 | 8 | Replicate call, two-step CE call, CE prompt | `55b5fa3` | 113 |
 | 9 | Sampling CLI, cost guard, thread pool | `90944e9` | 128 |
 | 10 | Logprobs probe — **run, all three NO** | `2fa6ddd` | 136 |
-| 11–13 | not started | | |
+| 13 | Analysis CLI, workbook, calibration figures | `28e3ed4` | 147 |
+| 11–12 | not started — **both spend money** | | |
 | 14 | **skipped** — TLP not buildable, see D5 result | — | — |
+
+All free work is done. The analysis half was verified end to end on synthetic JSONL
+before any sampling: 50 cases, 950 rows per group, SC AUC rising 0.73 → 0.84 → 0.93
+across tiers, and a rendered calibration figure showing CE below the diagonal — the
+paper's over-confidence result. `--bootstrap` was added to `uq_analyze_main.py` because
+the interval costs ~3.2s per group at 1000 iterations (about a minute for three
+providers); lower it while iterating, leave it at the default for published numbers.
 
 **Spent so far: ~$0.05** (the probe). Remaining budget ~$22 against ~$40.
 
@@ -505,7 +513,7 @@ $7.03, kimi $13.98 — **$22.31 total**, against the $23.50 hand estimate in D3.
 
 ## Open items
 
-- [ ] Task 13 — `uq_analyze_main.py` (free, offline)
+- [x] ~~Task 13 — `uq_analyze_main.py`~~ — done 2026-08-08
 - [ ] Task 11 — smoke run per tier (~$0.50): replace estimated effort multipliers with
       measured ones, **and** verify each provider accepts its three effort strings (D4),
       especially Mistral's `none`. If a provider's low and high output token counts match
