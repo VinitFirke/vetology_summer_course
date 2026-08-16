@@ -10,9 +10,9 @@ from typing import Literal
 from dotenv import dotenv_values
 from pydantic import BaseModel, SecretStr
 
-Provider = Literal["openai", "mistral", "groq", "kimi", "ollama_gemma", "ollama_nemotron"]
+Provider = Literal["openai", "mistral", "groq", "kimi", "ollama_gemma", "ollama_llama", "ollama_qwen"]
 
-PROVIDERS: tuple[Provider, ...] = ("openai", "mistral", "groq", "kimi", "ollama_gemma", "ollama_nemotron")
+PROVIDERS: tuple[Provider, ...] = ("openai", "mistral", "groq", "kimi", "ollama_gemma", "ollama_llama", "ollama_qwen")
 
 # Model IDs, verified available on these accounts. Swap freely.
 DEFAULT_MODEL_IDS: dict[Provider, str] = {
@@ -21,7 +21,8 @@ DEFAULT_MODEL_IDS: dict[Provider, str] = {
     "groq": "openai/gpt-oss-120b",
     "kimi": "kimi-k3",
     "ollama_gemma": "gemma4",
-    "ollama_nemotron": "nemotron-3-super:cloud"
+    "ollama_llama": "llama3.1",
+    "ollama_qwen": "qwen3.5:9b"
 }   
 #"groq": "llama-3.3-70b-versatile",
 
@@ -70,7 +71,7 @@ class Settings(BaseModel):
 
     def key_for(self, provider: Provider) -> str:
         """Return the API key for a provider, or explain clearly what is missing."""
-        if provider == "ollama_gemma" or provider == "ollama_nemotron" :
+        if provider == "ollama_gemma" or provider == "ollama_llama" or provider == "ollama_qwen":
             return ""
         key = self.api_keys.get(provider)
         if key is None or not key.get_secret_value().strip():
@@ -95,7 +96,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
 
     api_keys: dict[str, SecretStr] = {}
     for provider in PROVIDERS:
-        if provider == "ollama_gemma" or provider == "ollama_nemotron":
+        if provider == "ollama_gemma" or provider == "ollama_llama" or provider == "ollama_qwen":
             api_keys[provider] = SecretStr("")
             continue           
         raw = values.get(ENV_VAR_NAMES[provider]) or ""
