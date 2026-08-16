@@ -10,9 +10,9 @@ from typing import Literal
 from dotenv import dotenv_values
 from pydantic import BaseModel, SecretStr
 
-Provider = Literal["openai", "mistral", "groq", "kimi"]
+Provider = Literal["openai", "mistral", "groq", "kimi", "ollama"]
 
-PROVIDERS: tuple[Provider, ...] = ("openai", "mistral", "groq", "kimi")
+PROVIDERS: tuple[Provider, ...] = ("openai", "mistral", "groq", "kimi", "ollama")
 
 # Model IDs, verified available on these accounts. Swap freely.
 DEFAULT_MODEL_IDS: dict[Provider, str] = {
@@ -20,7 +20,8 @@ DEFAULT_MODEL_IDS: dict[Provider, str] = {
     "mistral": "mistral-medium-latest",
     "groq": "openai/gpt-oss-120b",
     "kimi": "kimi-k3",
-}
+    "ollama": "gemma4",
+}   
 #"groq": "llama-3.3-70b-versatile",
 
 REASONING_EFFORT: dict[Provider, str] = {

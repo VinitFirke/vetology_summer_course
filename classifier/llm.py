@@ -40,5 +40,11 @@ def build_model(provider: Provider, settings: Settings) -> BaseChatModel:
             base_url= BASE_URLS["kimi"],
             **options,
         )
+    if provider == "ollama":
+        from langchain_ollama import ChatOllama
+        return ChatOllama(
+            model = model_id,
+            temperature= 0,
+        )
     raise ValueError(f"Unknown provider: {provider!r}") 
 
