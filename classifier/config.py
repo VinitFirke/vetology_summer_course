@@ -10,9 +10,9 @@ from typing import Literal
 from dotenv import dotenv_values
 from pydantic import BaseModel, SecretStr
 
-Provider = Literal["openai", "mistral", "groq", "kimi", "ollama"]
+Provider = Literal["openai", "mistral", "groq", "kimi", "ollama_gemma", "ollama_nemotron"]
 
-PROVIDERS: tuple[Provider, ...] = ("openai", "mistral", "groq", "kimi", "ollama")
+PROVIDERS: tuple[Provider, ...] = ("openai", "mistral", "groq", "kimi", "ollama_gemma", "ollama_nemotron")
 
 # Model IDs, verified available on these accounts. Swap freely.
 DEFAULT_MODEL_IDS: dict[Provider, str] = {
@@ -20,7 +20,8 @@ DEFAULT_MODEL_IDS: dict[Provider, str] = {
     "mistral": "mistral-medium-latest",
     "groq": "openai/gpt-oss-120b",
     "kimi": "kimi-k3",
-    "ollama": "gemma4",
+    "ollama_gemma": "gemma4",
+    "ollama_nemotron": "nemotron-3-super:cloud"
 }   
 #"groq": "llama-3.3-70b-versatile",
 
@@ -94,7 +95,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
 
     api_keys: dict[str, SecretStr] = {}
     for provider in PROVIDERS:
-        if provider == "ollama":
+        if provider == "ollama_gemma" and provider == "ollama_nemotron":
             api_keys[provider] = SecretStr("")
             continue           
         raw = values.get(ENV_VAR_NAMES[provider]) or ""

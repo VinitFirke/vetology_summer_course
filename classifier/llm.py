@@ -21,16 +21,17 @@ def build_model(provider: Provider, settings: Settings) -> BaseChatModel:
     model_id = settings.model_for(provider)
     api_key = settings.key_for(provider)
 
-    options: dict[str, object] = {"reasoning_effort": REASONING_EFFORT[provider]}
+    #options: dict[str, object] = {"reasoning_effort": REASONING_EFFORT[provider]}
     if provider == "openai":
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model= model_id, api_key= api_key, **options)
+        #return ChatOpenAI(model= model_id, api_key= api_key, **options)
+        return ChatOpenAI(model= model_id, api_key= api_key, reasoning_effort= REASONING_EFFORT[provider])
     if provider == "mistral":
         from langchain_mistralai import ChatMistralAI
-        return ChatMistralAI(model = model_id, api_key= api_key, **options)
+        return ChatMistralAI(model = model_id, api_key= api_key, reasoning_effort= REASONING_EFFORT[provider])
     if provider == "groq":
         from langchain_groq import ChatGroq
-        return ChatGroq(model= model_id, api_key= api_key, temperature= 0, reasoning_format= "parsed", **options)
+        return ChatGroq(model= model_id, api_key= api_key, temperature= 0, reasoning_format= "parsed", reasoning_effort= REASONING_EFFORT[provider])
     
     if provider == "kimi":
         from langchain_openai import ChatOpenAI
@@ -38,7 +39,7 @@ def build_model(provider: Provider, settings: Settings) -> BaseChatModel:
             model= model_id, 
             api_key= api_key,
             base_url= BASE_URLS["kimi"],
-            **options,
+            reasoning_effort= REASONING_EFFORT[provider],
         )
     if provider == "ollama":
         from langchain_ollama import ChatOllama
