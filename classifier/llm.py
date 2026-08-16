@@ -41,7 +41,7 @@ def build_model(provider: Provider, settings: Settings) -> BaseChatModel:
             base_url= BASE_URLS["kimi"],
             reasoning_effort= REASONING_EFFORT[provider],
         )
-    if provider == "ollama_gemma" or provider == 'ollama_nemotron':
+    if provider == "ollama_gemma" or provider == 'ollama_llama' or provider == "ollama_qwen":
         from langchain_ollama import ChatOllama
         return ChatOllama(
             model = model_id,
