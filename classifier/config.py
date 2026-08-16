@@ -70,7 +70,7 @@ class Settings(BaseModel):
 
     def key_for(self, provider: Provider) -> str:
         """Return the API key for a provider, or explain clearly what is missing."""
-        if provider == "ollama":
+        if provider == "ollama_gemma" or provider == "ollama_nemotron" :
             return ""
         key = self.api_keys.get(provider)
         if key is None or not key.get_secret_value().strip():
@@ -95,7 +95,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
 
     api_keys: dict[str, SecretStr] = {}
     for provider in PROVIDERS:
-        if provider == "ollama_gemma" and provider == "ollama_nemotron":
+        if provider == "ollama_gemma" or provider == "ollama_nemotron":
             api_keys[provider] = SecretStr("")
             continue           
         raw = values.get(ENV_VAR_NAMES[provider]) or ""
