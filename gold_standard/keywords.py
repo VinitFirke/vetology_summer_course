@@ -85,6 +85,8 @@ SEARCH_TERMS: dict[str, tuple[str, ...]] = {
         "decreased lung volume",
     ),
     # --- thoracic: trachea, heart, pleura, mediastinum ---
+    # Broadened deliberately: any narrowed tracheal lumen counts here, collapse
+    # included. See the hypo_plastic_trachea section of criteria.md for why.
     "hypo_plastic_trachea": (
         "hypoplastic trachea",
         "tracheal hypoplasia",
@@ -92,6 +94,14 @@ SEARCH_TERMS: dict[str, tuple[str, ...]] = {
         "tracheal diameter",
         "narrowed trachea",
         "small trachea",
+        "tracheal collapse",
+        "collapsing trachea",
+        "tracheal narrowing",
+        "trachea is narrow",
+        "trachea is mildly narrowed",
+        "tracheomalacia",
+        "narrowing of the trachea",
+        "dynamic airway disease",
     ),
     "cardiomegaly": (
         "cardiomegaly",

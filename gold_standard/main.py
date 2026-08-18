@@ -11,6 +11,7 @@ all, which is the cheapest possible guarantee that they cannot influence a judge
 """
 
 import argparse
+from pathlib import Path
 
 from gold_standard.csv_io import apply_labels, column_index, read_sheet
 from gold_standard.evidence import expand_all, load_evidence, scored_count
@@ -84,6 +85,77 @@ def cmd_show(args: argparse.Namespace) -> None:
     print(f"[{shown} case(s) shown; {scored_count(records)} already scored]")
 
 
+def cmd_find(args: argparse.Namespace) -> None:
+    """Print unjudged eligible cases whose report matches a regex.
+
+    The worklist's coverage block is built once from keywords.py, so when a column
+    turns out still to be short after those candidates are read, this is how the next
+    ones are found without rebuilding the worklist and disturbing the random tail.
+    """
+    import re
+
+    from gold_standard.screen import eligible_case_ids, report_text
+
+    sheet = get_sheet(args.sheet)
+    records = load_evidence(sheet)
+    eligible = set(eligible_case_ids(sheet))
+    pattern = re.compile(args.pattern, re.I)
+
+    header, rows = read_sheet(gold_csv_path(sheet))
+    case_col = column_index(header, COL_CASE_ID)
+    findings_col = column_index(header, COL_FINDINGS)
+    conclusions_col = column_index(header, COL_CONCLUSIONS)
+
+    shown = 0
+    for row in rows:
+        if shown >= args.count:
+            break
+        case_id = row[case_col]
+        if case_id in records or case_id not in eligible:
+            continue
+        if not pattern.search(report_text(header, row)):
+            continue
+        print("=" * 100)
+        print(f"CASE {case_id}   [found: {args.pattern}]   sheet={sheet.name}")
+        print("-" * 100)
+        print("FINDINGS:")
+        print(row[findings_col].strip())
+        print("-" * 100)
+        print("CONCLUSIONS:")
+        print(row[conclusions_col].strip())
+        print()
+        shown += 1
+
+    print(f"[{shown} case(s) shown]")
+
+
+def cmd_record(args: argparse.Namespace) -> None:
+    """Merge a batch of judgements into the evidence store.
+
+    The batch file is {case_id: {"abnormal": {finding: {evidence, reasoning}}}}, or
+    {case_id: {"skipped": true, "note": "..."}} for a case the worklist offered but
+    the report does not support scoring. Merging rather than replacing means a batch
+    can be re-recorded after a correction without disturbing the rest.
+    """
+    import json
+
+    from gold_standard.evidence import CaseRecord, save_evidence
+
+    sheet = get_sheet(args.sheet)
+    records = load_evidence(sheet)
+    batch = json.loads(Path(args.file).read_text(encoding="utf-8"))
+
+    for case_id, payload in batch.items():
+        records[case_id] = CaseRecord(case_id=case_id, **payload)
+
+    save_evidence(sheet, records)
+    skipped = sum(1 for r in records.values() if r.skipped)
+    print(
+        f"{sheet.name}: recorded {len(batch)}, "
+        f"store now holds {scored_count(records)} scored + {skipped} skipped"
+    )
+
+
 def cmd_apply(args: argparse.Namespace) -> None:
     """Project the evidence store into the CSV and prove nothing else moved."""
     for sheet in _sheets(args.sheet):
@@ -124,25 +196,42 @@ def cmd_verify(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="gold_standard")
-    parser.add_argument("--sheet", choices=sorted(SHEETS), help="default: all sheets")
+    # --sheet is declared on a shared parent so it can be typed *after* the
+    # subcommand, which is the order anyone actually types it in.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--sheet", choices=sorted(SHEETS), help="default: all sheets")
+
+    parser = argparse.ArgumentParser(prog="gold_standard", parents=[common])
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("screen", help="count eligible cases").set_defaults(func=cmd_screen)
+    sub.add_parser("screen", parents=[common], help="count eligible cases").set_defaults(
+        func=cmd_screen
+    )
 
-    worklist = sub.add_parser("worklist", help="build and save the reading order")
+    worklist = sub.add_parser("worklist", parents=[common], help="build the reading order")
     worklist.add_argument("--seed", type=int, default=20260818)
     worklist.set_defaults(func=cmd_worklist)
 
-    show = sub.add_parser("show", help="print the next unjudged cases")
+    show = sub.add_parser("show", parents=[common], help="print the next unjudged cases")
     show.add_argument("--count", type=int, default=25)
     show.set_defaults(func=cmd_show)
 
-    sub.add_parser("apply", help="write the evidence store into the CSVs").set_defaults(
-        func=cmd_apply
-    )
+    find = sub.add_parser("find", parents=[common], help="find unjudged cases by regex")
+    find.add_argument("--pattern", required=True)
+    find.add_argument("--count", type=int, default=5)
+    find.set_defaults(func=cmd_find)
 
-    verify = sub.add_parser("verify", help="run every check")
+    record = sub.add_parser(
+        "record", parents=[common], help="merge a batch JSON into the evidence store"
+    )
+    record.add_argument("--file", required=True)
+    record.set_defaults(func=cmd_record)
+
+    sub.add_parser(
+        "apply", parents=[common], help="write the evidence store into the CSVs"
+    ).set_defaults(func=cmd_apply)
+
+    verify = sub.add_parser("verify", parents=[common], help="run every check")
     verify.add_argument("--minimum", type=int, default=3)
     verify.set_defaults(func=cmd_verify)
 
