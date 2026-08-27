@@ -1,0 +1,75 @@
+{
+  "version": "1.0-feline-thorax-fewshot",
+  "notes": "Few-shot variant of feline_thorax.json. Same persona and the same output conventions as the zero-shot prompt; the only addition is the \"examples\" array, which is replayed to the model as worked turns before the real case. Still carries no clinical decision rules and no glossary of the finding names, so what the examples teach is the labelling threshold rather than a rulebook. Carries 2 worked examples, written by hand from real feline thoracic reports that are not in the gold-standard set. Copy \"example_template\" below to add more. Finding names are injected from the feline_thorax category definition.",
+  "system": "You are a board-certified veterinary radiologist practising in the United States, subspecialised in small-animal diagnostic imaging. You are reviewing the report of a feline thoracic radiographic study written by another radiologist.\n\nBefore the case you are asked about, you will be shown worked cases: a report, and the labels a radiologist assigned to it. Read them as a guide to how these finding names are applied and how strict the threshold for \"abnormal\" is. The worked cases leave evidence and reasoning blank; your own answer must fill both in.\n\nFor each finding in the list you are given, decide whether it is normal or abnormal in this patient, based only on the report text provided.\n\nLabelling conventions:\n- Every finding must be labelled exactly \"normal\" or \"abnormal\". There is no third option.\n- If the report does not mention a finding at all, or the relevant structure could not be assessed, label it \"normal\".\n- Return a judgement for every finding in the list, in the order given.\n\nFor each finding also return:\n- evidence: the sentence from the report that decided your label, quoted verbatim from the text. Use an empty string if the report says nothing relevant.\n- reasoning: one sentence explaining why that label follows from the evidence.\n\nApply your own clinical judgement as a radiologist. Base every decision on the report text alone.",
+  "user_template": "CaseID: {case_id}\n\nFINDINGS (original radiologist report):\n{findings}\n\nCONCLUSIONS (original radiologist report):\n{conclusions}\n\nLabel each of the following {n_findings} findings:\n{finding_list}",
+  "examples": [
+    {
+      "case_id": "2538959",
+      "findings": "THORAX (three radiographs for review). No priors.\n\n- Mild diffuse bronchial pattern.\n- Best appreciated on the RLAT projection, there is a subtle increase in patchy, peribronchial unstructured interstitial to alveolar opacification in the ventral portion of the left caudal lung lobe.\n- Prominent aortic root.\n- The cardiac silhouette, pulmonary vasculature, trachea, pleural space and remaining included intrathoracic structures are unremarkable.\n- The stomach contains a small volume of gas.\n- The remaining cranial abdominal structures are normal.\n- The included musculoskeletal structures are unremarkable.",
+      "conclusions": "1. Although traditionally the presence of a mild diffuse bronchial pattern would first raise suspicion for feline asthma, given that there is a relatively acute onset cough and there are ventrally distributed patchy peribronchial unstructured opacities in the ventral portion of the left caudal lung lobe, I am prioritizing bronchopneumonia as the first differential diagnosis (DDx bacterial, less likely viral or parasitic). Aspiration pneumonia is also possible, but less likely given there is no history of vomiting. I would recommend considering initiation of therapy for bronchopneumonia and rechecking radiographs in 7-10 days or sooner if clinically indicated.\n\nPlease note that underlying feline asthma cannot be excluded in this case and may be partially contributing to the critical signs but is suspected not be the primary driving factor.\n\n2. Prominent aortic root can be an incidental finding in older cats, but however has been associated with systemic hypertension. Consider blood pressure measurement and careful cardiac auscultation for a murmur, if not recently performed.\n\n3. Aerophagia.",
+      "labels": {
+        "bronchitis": "abnormal",
+        "interstitial": "abnormal",
+        "pneumonia": "abnormal",
+        "Alveolar_interstitial_pattern": "abnormal"
+      }
+    },
+    {
+      "case_id": "2538154",
+      "findings": "THORAX (three radiographs for review). No priors.\n\n- Mildly excessive body habitus, which is associated with an accumulation of fat in the cranial mediastinum/pericardium and confers a impression of mild generalized cardiomegaly (particularly on the VD image).\n- Mild diffuse bronchial pattern.\n- Mild gas in the cranial thoracic esophagus.\n- Cardiac silhouette, pulmonary parenchyma and pulmonary vasculature normal.\n- Pleural space normal.\n- Remaining included intrathoracic structures unremarkable.\n- Stomach invisibles small intestinal segments moderately distended with gas\n- Spleen is moderately enlarged, with rounded margins.\n- Included musculoskeletal structures are unremarkable.",
+      "conclusions": "1. There is a mild diffuse bronchial pattern present that seems radiographically most likely to be the cause of the reported coughing. Although feline asthma is possible and tends to be the first differential diagnosis in most cases, particularly in pure-bred cats, it is somewhat atypical for the patient to present acutely at the reported age (6y) and for this reason bronchitis of infectious (e.g. parasitic, bacterial) or inhaled irritant etiologies must also be considered. There is no evidence of pneumonia or inhaled foreign material.\n\n2. The spleen is fairly large for a cat, and there if there is evidence of systemic illness in this patient, or clinical signs referable to the abdomen, an ultrasound with fine needle aspiration of the splenic parenchyma might be considered. Benign etiologies such as congestion secondary to sedation, lymphoid hyperplasia or extramedullary hematopoiesis remain the first differential diagnosis, however neoplasia such as lymphoma or mast cell tumor are possible.\n\n3. Aerophagia.",
+      "labels": {
+        "bronchitis": "abnormal"
+      }
+    }
+  ],
+  "how_to_add_examples": [
+    "HOW TO ADD YOUR OWN FEW-SHOT EXAMPLES - this key is ignored by the loader; it is here as a template to copy from.",
+    "1. Copy an entry out of \"example_template\" below into the \"examples\" array above it.",
+    "2. Replace <PASTE ...> with the report text, verbatim, from one real case.",
+    "3. In \"labels\", name only the findings you want to state - normally the abnormal ones. Every finding you leave out is filled in as \"normal\" automatically, which matches the convention in the system prompt.",
+    "4. Finding names must be spelled exactly as they appear in \"asked_findings\" below; anything else raises a ValueError at render time rather than being silently ignored.",
+    "5. \"case_id\" is free text and never scored - EXAMPLE-1, EXAMPLE-2 ... keeps them clearly apart from the real CaseIDs.",
+    "6. Do not write evidence or reasoning for examples; they are emitted as empty strings on purpose, so the model does not learn to invent quotes.",
+    "7. Two entries are given as a starting point. Add or delete entries freely - an empty \"examples\" array makes this prompt behave exactly like the zero-shot one."
+  ],
+  "asked_findings": [
+    "pulmonary_nodules",
+    "esophagitis",
+    "pneumonia",
+    "bronchitis",
+    "interstitial",
+    "hypo_plastic_trachea",
+    "cardiomegaly",
+    "right_sided_cardiomegaly",
+    "left_sided_cardiomegaly",
+    "pleural_effusion",
+    "perihilar_infiltrate",
+    "focal_caudodorsal_lung",
+    "focal_perihilar",
+    "bronchiectasis",
+    "pulmonary_vessel_enlargement",
+    "thoracic_lymphadenopathy",
+    "pulmonary_hypoinflation",
+    "pericardial_effusion",
+    "Alveolar_interstitial_pattern"
+  ],
+  "example_template": [
+    {
+      "case_id": "EXAMPLE-1",
+      "findings": "<PASTE THE FINDINGS SECTION OF THE REPORT HERE>",
+      "conclusions": "<PASTE THE CONCLUSIONS SECTION OF THE REPORT HERE>",
+      "labels": {
+        "bronchitis": "abnormal",
+        "interstitial": "abnormal"
+      }
+    },
+    {
+      "case_id": "EXAMPLE-2",
+      "findings": "<PASTE THE FINDINGS SECTION OF THE REPORT HERE>",
+      "conclusions": "<PASTE THE CONCLUSIONS SECTION OF THE REPORT HERE>",
+      "labels": {}
+    }
+  ]
+}
